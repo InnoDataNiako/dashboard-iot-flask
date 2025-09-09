@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard IoT Avancé - Surveillance Temps Réel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
+    <!--le favicon limage se trouve dans le dossie templates-->
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}"/>
+    <!--Mon CSS-->
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --info-color: #17a2b8;
+            --dark-bg: #1a1a1a;
+            --card-dark-bg: #2d2d30;
+            --text-light: #f8f9fa;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            transition: all 0.3s ease;
+        }
+
+        .dashboard-container {
+            padding: 20px;
+        }
+
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 35px rgba(0,0,0,0.2);
+        }
+
+        .data-card {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .data-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .data-label {
+            font-size: 1.1rem;
+            color: #6c757d;
+            font-weight: 500;
+        }
+
+        .status-indicator {
+            padding: 8px 16px;
+            border-radius: 50px;
+            font-weight: bold;
+            text-align: center;
+            margin: 15px 0;
+        }
+
+        .status-connected {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
+            animation: pulse-success 2s infinite;
+        }
+
+        .status-disconnected {
+            background: linear-gradient(45deg, #dc3545, #e74c3c);
+            color: white;
+        }
+
+        .status-waiting {
+            background: linear-gradient(45deg, #ffc107, #fd7e14);
+            color: white;
+        }
+
+        .led-control {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .led-indicator {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: inline-block;
+            margin: 0 10px;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .led-on {
+            background: radial-gradient(circle, #28a745, #20c997);
+            box-shadow: 0 0 20px #28a745, 0 0 40px #28a745;
+            animation: pulse 2s infinite;
+        }
+
+        .led-off {
+            background: #6c757d;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 20px #28a745; }
+            50% { box-shadow: 0 0 30px #28a745, 0 0 50px #28a745; }
+        }
+
+        @keyframes pulse-success {
+            0%, 100% { box-shadow: 0 0 10px rgba(40, 167, 69, 0.5); }
+            50% { box-shadow: 0 0 20px rgba(40, 167, 69, 0.8); }
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin: 20px 0;
+        }
+
+        .alert-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1050;
+            max-width: 400px;
+        }
+
+        .alert {
+            margin-bottom: 10px;
+            border-radius: 10px;
+            border: none;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .btn {
+            border-radius: 25px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .form-control, .form-select {
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.9);
+        }
+
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+        }
+
+        /* Mode sombre */
+        body.dark-mode {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        }
+
+        body.dark-mode .card {
+            background: rgba(45, 45, 48, 0.95);
+            color: var(--text-light);
+        }
+
+        body.dark-mode .data-label {
+            color: #adb5bd;
+        }
+
+        body.dark-mode .form-control,
+        body.dark-mode .form-select {
+            background: rgba(255,255,255,0.1);
+            border-color: rgba(255,255,255,0.3);
+            color: #f8f9fa;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .waiting-data {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+
+        .pulse-waiting {
+            animation: pulse-wait 2s infinite;
+        }
+
+        @keyframes pulse-wait {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        .no-data-message {
+            background: rgba(255, 193, 7, 0.1);
+            border: 1px solid #ffc107;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
+    </style>
+        <!-- Fin de Mon CSS-->
+
+</head>
+<body>
+    <!-- Bouton changement de thème -->
+    <button class="btn btn-outline-light theme-toggle" onclick="toggleTheme()">
+        <i class="fas fa-moon" id="theme-icon"></i>
+    </button>
+
+    <!-- Container des alertes -->
+    <div id="alert-container" class="alert-container"></div>
+
+    <div class="container-fluid dashboard-container">
+        <!-- En-tête -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card fade-in">
+                    <div class="card-body text-center">
+                        <h1 class="mb-2">
+                            <i class="fas fa-microchip text-primary"></i>
+                            Dashboard IoT - ESP32 + Wokwi
+                        </h1>
+                        <p class="mb-2 text-muted">Surveillance temps réel • Données ESP32 via Flask • Contrôle LED</p>
+                        <div id="status-indicator" class="status-indicator status-waiting">
+                            <i class="fas fa-wifi"></i> En attente des données ESP32...
+                        </div>
+                        <div class="mt-3">
+                            <small class="text-muted">
+                                Dernière mise à jour: <span id="last-update">--</span> | 
+                                Serveur: <span id="server-status">Connecté</span>
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Message d'attente des données -->
+        <div id="no-data-warning" class="row mb-4">
+            <div class="col-12">
+                <div class="no-data-message">
+                    <h5><i class="fas fa-info-circle text-warning"></i> En attente des données</h5>
+                    <p class="mb-2">Le dashboard attend les données de votre ESP32 via Wokwi...</p>
+                    <small class="text-muted">
+                        Vérifiez que votre code ESP32 fonctionne et que l'URL ngrok est correcte
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Données actuelles et contrôles -->
+        <div class="row mb-4">
+            <!-- Température -->
+            <div class="col-lg-3 col-md-6">
+                <div class="card data-card fade-in">
+                    <div class="card-body">
+                        <div class="data-label">
+                            <i class="fas fa-thermometer-half text-danger"></i> Température
+                        </div>
+                        <div id="temperature-value" class="data-value text-danger pulse-waiting">--.- °C</div>
+                        <small id="temp-trend" class="text-muted">En attente...</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Humidité -->
+            <div class="col-lg-3 col-md-6">
+                <div class="card data-card fade-in">
+                    <div class="card-body">
+                        <div class="data-label">
+                            <i class="fas fa-tint text-primary"></i> Humidité
+                        </div>
+                        <div id="humidity-value" class="data-value text-primary pulse-waiting">--.- %</div>
+                        <small id="humidity-trend" class="text-muted">En attente...</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contrôle LED -->
+            <div class="col-lg-3 col-md-6">
+                <div class="card led-control fade-in">
+                    <div class="card-body">
+                        <div class="data-label">
+                            <i class="fas fa-lightbulb"></i> LED ESP32
+                        </div>
+                        <div class="my-3">
+                            <span id="led-status-text" class="badge bg-secondary">Attente...</span>
+                            <span id="led-indicator" class="led-indicator led-off"></span>
+                        </div>
+                        <button id="led-toggle-btn" class="btn btn-primary btn-sm" onclick="toggleLed()">
+                            <i class="fas fa-power-off"></i> Toggle LED
+                        </button>
+                    </div>
+                </div>
+            </div>
+<!-- Statistiques -->
+            <div class="col-lg-3 col-md-6">
+                <div class="card data-card fade-in">
+                    <div class="card-body">
+                        <div class="data-label">
+                            <i class="fas fa-chart-bar text-success"></i> Mesures
+                        </div>
+                        <div id="total-readings" class="data-value text-success">0</div>
+                        <small class="text-muted">Données reçues</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuration des seuils d'alerte -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card fade-in">
+                    <div class="card-header">
+                        <h5><i class="fas fa-cog text-warning"></i> Configuration des Alertes</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <label class="form-label">Température Min (°C):</label>
+                                <input type="number" id="temp-min-alert" class="form-control" value="15" step="0.1">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Température Max (°C):</label>
+                                <input type="number" id="temp-max-alert" class="form-control" value="35" step="0.1">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Humidité Min (%):</label>
+                                <input type="number" id="humidity-min-alert" class="form-control" value="30" step="1">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Humidité Max (%):</label>
+                                <input type="number" id="humidity-max-alert" class="form-control" value="80" step="1">
+                            </div>
+                        </div>
+                        <div class="text-center mt-3">
+                            <button class="btn btn-success" onclick="saveAlertSettings()">
+                                <i class="fas fa-save"></i> Sauvegarder
+                            </button>
+                            <div class="form-check form-switch mt-3 d-inline-block ms-3">
+                                <input class="form-check-input" type="checkbox" id="alerts-enabled" checked>
+                                <label class="form-check-label" for="alerts-enabled">Alertes activées</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Graphiques -->
+        <div class="row mb-4">
+            <div class="col-lg-6">
+                <div class="card fade-in">
+                    <div class="card-header">
+                        <h5><i class="fas fa-chart-line text-danger"></i> Température (temps réel)</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="temp-chart-waiting" class="waiting-data">
+                            <i class="fas fa-spinner fa-spin fa-2x"></i>
+                            <p class="mt-3">En attente des données de température...</p>
+                        </div>
+                        <div class="chart-container" style="display: none;">
+                            <canvas id="temperatureChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="card fade-in">
+                    <div class="card-header">
+                        <h5><i class="fas fa-chart-area text-primary"></i> Humidité (temps réel)</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="humidity-chart-waiting" class="waiting-data">
+                            <i class="fas fa-spinner fa-spin fa-2x"></i>
+                            <p class="mt-3">En attente des données d'humidité...</p>
+                        </div>
+                        <div class="chart-container" style="display: none;">
+                            <canvas id="humidityChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Graphique combiné -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card fade-in">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5><i class="fas fa-chart-bar text-info"></i> Historique Combiné</h5>
+                        <div>
+                            <button class="btn btn-sm btn-outline-success" onclick="exportData()">
+                                <i class="fas fa-download"></i> Export CSV
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="clearData()">
+                                <i class="fas fa-trash"></i> Effacer
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="combined-chart-waiting" class="waiting-data">
+                            <i class="fas fa-spinner fa-spin fa-2x"></i>
+                            <p class="mt-3">Graphique combiné disponible après réception des données...</p>
+                        </div>
+                        <div class="chart-container" style="height: 400px; display: none;">
+                            <canvas id="combinedChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+ // Variables globales
+let socket;
+let temperatureChart, humidityChart, combinedChart;
+let sensorData = [];
+let hasReceivedData = false;
+let reconnectAttempts = 0;
+let maxReconnectAttempts = 5;
+
+// Initialisation
+document.addEventListener('DOMContentLoaded', function() {
+    console.log(' Initialisation du dashboard...');
+    initializeSocket();
+    initializeCharts();
+    loadAlertSettings();
+    
+    // Charger le thème sauvegardé
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') {
+        document.body.classList.add('dark-mode');
+        const themeIcon = document.getElementById('theme-icon');
+        if (themeIcon) themeIcon.className = 'fas fa-sun';
+    }
+    
+    // Vérifier l'état du serveur au démarrage
+    checkServerStatus();
+});
+
+function checkServerStatus() {
+    console.log('🔍 Vérification du statut du serveur...');
+    fetch('/status')
+        .then(response => response.json())
+        .then(data => {
+            console.log('✅ Serveur actif:', data);
+            document.getElementById('server-status').textContent = 'Connecté';
+            
+            // Si on a des données historiques, les charger
+            if (data.total_readings > 0) {
+                loadHistoricalData();
+            }
+        })
+        .catch(error => {
+            console.error(' Erreur connexion serveur:', error);
+            document.getElementById('server-status').textContent = 'Erreur';
+            showAlert('danger', 'Erreur Serveur', 'Impossible de se connecter au serveur Flask');
+        });
+}
+
+function loadHistoricalData() {
+    console.log('📈 Chargement des données historiques...');
+    fetch('/history?limit=50')
+        .then(response => response.json())
+        .then(data => {
+            if (data.data && data.data.length > 0) {
+                console.log('📊 Données historiques chargées:', data.data.length, 'points');
+                sensorData = data.data;
+                
+                // Afficher la dernière donnée
+                const lastData = data.data[data.data.length - 1];
+                handleNewData(lastData, false); // false = pas de nouvelle donnée
+                
+                updateCharts();
+            }
+        })
+        .catch(error => {
+            console.error('❌ Erreur chargement historique:', error);
+        });
+}
+
+function initializeSocket() {
+    console.log(' Connexion au serveur Flask via SocketIO...');
+    
+    // Déconnecter l'ancienne connexion si elle existe
+    if (socket) {
+        socket.disconnect();
+    }
+    
+    socket = io({
+        transports: ['websocket', 'polling'],
+        upgrade: true,
+        rememberUpgrade: true
+    });
+    
+    socket.on('connect', function() {
+        console.log('✅ Connecté au serveur Flask - ID:', socket.id);
+        reconnectAttempts = 0;
+        document.getElementById('server-status').textContent = 'Connecté';
+        showAlert('success', 'Serveur Connecté', 'Connexion SocketIO établie');
+        
+        // Demander l'historique au serveur
+        socket.emit('request_history', { limit: 50 });
+    });
+    
+    socket.on('connect_error', function(error) {
+        console.error('❌ Erreur connexion SocketIO:', error);
+        document.getElementById('server-status').textContent = 'Erreur connexion';
+        
+        if (reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++;
+            showAlert('warning', 'Reconnexion...', `Tentative ${reconnectAttempts}/${maxReconnectAttempts}`);
+        } else {
+            showAlert('danger', 'Connexion Échouée', 'Impossible de se connecter au serveur');
+        }
+    });
+    
+    socket.on('disconnect', function(reason) {
+        console.log('❌ Déconnecté du serveur - Raison:', reason);
+        document.getElementById('server-status').textContent = 'Déconnecté';
+        
+        if (reason === 'io server disconnect') {
+            // Le serveur a forcé la déconnexion, se reconnecter manuellement
+            socket.connect();
+        }
+        
+        showAlert('warning', 'Serveur Déconnecté', 'Connexion perdue, tentative de reconnexion...');
+    });
+    
+    socket.on('reconnect', function(attemptNumber) {
+        console.log('🔄 Reconnecté après', attemptNumber, 'tentatives');
+        document.getElementById('server-status').textContent = 'Reconnecté';
+        showAlert('success', 'Reconnecté', 'Connexion restaurée');
+    });
+    
+    // Réception des nouvelles données
+    socket.on('new_data', function(data) {
+        console.log('📊 Nouvelles données reçues via SocketIO:', data);
+        handleNewData(data, true); // true = nouvelle donnée
+    });
+    
+    // Mise à jour LED
+    socket.on('led_update', function(data) {
+        console.log('💡 Mise à jour LED via SocketIO:', data);
+        updateLedDisplay(data.led_state);
+    });
+    
+    // Alertes
+    socket.on('new_alerts', function(alerts) {
+        console.log('🚨 Nouvelles alertes:', alerts);
+        if (Array.isArray(alerts)) {
+            alerts.forEach(alert => {
+                showAlert(alert.severity, alert.type, alert.message);
+            });
+        }
+    });
+    
+    // Configuration des alertes mise à jour
+    socket.on('alerts_config_updated', function(config) {
+        console.log('⚙️ Config alertes mise à jour:', config);
+        updateAlertConfigDisplay(config);
+    });
+    
+    // Données historiques
+    socket.on('history_data', function(data) {
+        console.log('📈 Données historiques reçues via SocketIO:', data.length, 'points');
+        if (Array.isArray(data) && data.length > 0) {
+            sensorData = data;
+            
+            // Si c'est la première fois qu'on reçoit des données
+            if (!hasReceivedData && sensorData.length > 0) {
+                const lastData = sensorData[sensorData.length - 1];
+                handleNewData(lastData, false);
+            }
+            
+            updateCharts();
+        }
+    });
+}
+
+function handleNewData(data, isNewData = true) {
+    console.log('🔄 Traitement des données:', data, 'Nouvelle:', isNewData);
+    
+    // Validation des données
+    if (!data || typeof data.temperature !== 'number' || typeof data.humidity !== 'number') {
+        console.error(' Données invalides:', data);
+        return;
+    }
+    
+    if (!hasReceivedData || isNewData) {
+        if (!hasReceivedData) {
+            hasReceivedData = true;
+            hideWaitingMessages();
+            showCharts();
+            
+            // Mise à jour du statut
+            const statusEl = document.getElementById('status-indicator');
+            statusEl.className = 'status-indicator status-connected';
+            statusEl.innerHTML = '<i class="fas fa-wifi"></i> ESP32 Connecté';
+        }
+        
+        // Ajouter les nouvelles données seulement si c'est vraiment nouveau
+        if (isNewData) {
+            sensorData.push(data);
+            if (sensorData.length > 100) {
+                sensorData = sensorData.slice(-100); // Garder seulement les 100 dernières
+            }
+        }
+    }
+    
+    // Mise à jour des affichages
+    updateDisplays(data);
+    updateCharts();
+    
+    // Mise à jour du timestamp
+    const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+    document.getElementById('last-update').textContent = timestamp;
+}
+
+function updateDisplays(data) {
+    console.log('📱 Mise à jour des affichages avec:', data);
+    
+    try {
+        // Température
+        const tempElement = document.getElementById('temperature-value');
+        if (tempElement) {
+            tempElement.textContent = data.temperature.toFixed(1) + ' °C';
+            tempElement.classList.remove('pulse-waiting');
+        }
+        
+        // Humidité
+        const humElement = document.getElementById('humidity-value');
+        if (humElement) {
+            humElement.textContent = data.humidity.toFixed(1) + ' %';
+            humElement.classList.remove('pulse-waiting');
+        }
+        
+        // Nombre total de lectures
+        const readingsElement = document.getElementById('total-readings');
+        if (readingsElement) {
+            readingsElement.textContent = sensorData.length;
+        }
+        
+        // Mise à jour des tendances
+        if (sensorData.length >= 2) {
+            const prevTemp = sensorData[sensorData.length - 2].temperature;
+            const prevHum = sensorData[sensorData.length - 2].humidity;
+            
+            const tempDiff = data.temperature - prevTemp;
+            const humDiff = data.humidity - prevHum;
+            
+            const tempTrendEl = document.getElementById('temp-trend');
+            if (tempTrendEl) {
+                tempTrendEl.textContent = 
+                    tempDiff > 0.1 ? '↗ +' + tempDiff.toFixed(1) + '°C' :
+                    tempDiff < -0.1 ? '↘ ' + tempDiff.toFixed(1) + '°C' : '→ Stable';
+            }
+                
+            const humTrendEl = document.getElementById('humidity-trend');
+            if (humTrendEl) {
+                humTrendEl.textContent = 
+                    humDiff > 1 ? '↗ +' + humDiff.toFixed(1) + '%' :
+                    humDiff < -1 ? '↘ ' + humDiff.toFixed(1) + '%' : '→ Stable';
+            }
+        }
+        
+    } catch (error) {
+        console.error(' Erreur mise à jour affichages:', error);
+    }
+}
+
+function hideWaitingMessages() {
+    console.log(' Masquage des messages d\'attente...');
+    
+    const elements = [
+        'no-data-warning',
+        'temp-chart-waiting',
+        'humidity-chart-waiting',
+        'combined-chart-waiting'
+    ];
+    
+    elements.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.style.display = 'none';
+        }
+    });
+}
+
+function showCharts() {
+    console.log('📈 Affichage des graphiques...');
+    
+    document.querySelectorAll('.chart-container').forEach(container => {
+        container.style.display = 'block';
+    });
+}
+
+function initializeCharts() {
+    console.log('📊 Initialisation des graphiques...');
+    
+    try {
+        // Graphique température
+        const tempCtx = document.getElementById('temperatureChart')?.getContext('2d');
+        if (tempCtx) {
+            temperatureChart = new Chart(tempCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Température (°C)',
+                        data: [],
+                        borderColor: '#dc3545',
+                        backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true }
+                    },
+                    scales: {
+                        y: { beginAtZero: false },
+                        x: { display: true }
+                    },
+                    animation: {
+                        duration: 300
+                    }
+                }
+            });
+        }
+        
+        // Graphique humidité
+        const humCtx = document.getElementById('humidityChart')?.getContext('2d');
+        if (humCtx) {
+            humidityChart = new Chart(humCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Humidité (%)',
+                        data: [],
+                        borderColor: '#007bff',
+                        backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, max: 100 },
+                        x: { display: true }
+                    },
+                    animation: {
+                        duration: 300
+                    }
+                }
+            });
+        }
+        
+        // Graphique combiné
+        const combCtx = document.getElementById('combinedChart')?.getContext('2d');
+        if (combCtx) {
+            combinedChart = new Chart(combCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Température (°C)',
+                            data: [],
+                            borderColor: '#dc3545',
+                            backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                            yAxisID: 'y',
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Humidité (%)',
+                            data: [],
+                            borderColor: '#007bff',
+                            backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                            yAxisID: 'y1',
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true }
+                    },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: { display: true, text: 'Température (°C)' }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: { display: true, text: 'Humidité (%)' },
+                            grid: { drawOnChartArea: false }
+                        }
+                    },
+                    animation: {
+                        duration: 300
+                    }
+                }
+            });
+        }
+        
+        console.log('✅ Graphiques initialisés');
+        
+    } catch (error) {
+        console.error('❌ Erreur initialisation graphiques:', error);
+    }
+}
+
+function updateCharts() {
+    if (sensorData.length === 0) {
+        console.log('⚠️ Aucune donnée pour les graphiques');
+        return;
+    }
+    
+    console.log('📊 Mise à jour des graphiques avec', sensorData.length, 'points');
+    
+    try {
+        const labels = sensorData.map(d => {
+            if (d.timestamp) {
+                return new Date(d.timestamp).toLocaleTimeString();
+            }
+            return new Date().toLocaleTimeString();
+        });
+        
+        const tempData = sensorData.map(d => d.temperature);
+        const humData = sensorData.map(d => d.humidity);
+        
+        // Mise à jour du graphique température
+        if (temperatureChart) {
+            temperatureChart.data.labels = labels;
+            temperatureChart.data.datasets[0].data = tempData;
+            temperatureChart.update('none');
+        }
+        
+        // Mise à jour du graphique humidité
+        if (humidityChart) {
+            humidityChart.data.labels = labels;
+            humidityChart.data.datasets[0].data = humData;
+            humidityChart.update('none');
+        }
+        
+        // Mise à jour du graphique combiné
+        if (combinedChart) {
+            combinedChart.data.labels = labels;
+            combinedChart.data.datasets[0].data = tempData;
+            combinedChart.data.datasets[1].data = humData;
+            combinedChart.update('none');
+        }
+        
+        console.log('✅ Graphiques mis à jour');
+        
+    } catch (error) {
+        console.error('❌ Erreur mise à jour graphiques:', error);
+    }
+}
+
+// Contrôle LED
+function toggleLed() {
+    console.log('💡 Toggle LED demandé');
+    
+    if (!socket || !socket.connected) {
+        console.error('❌ Socket non connecté');
+        showAlert('danger', 'Erreur', 'Connexion au serveur requise');
+        return;
+    }
+    
+    const currentState = getCurrentLedState();
+    const newState = !currentState;
+    
+    console.log(`💡 Changement LED: ${currentState} -> ${newState}`);
+    
+    // Émettre via SocketIO
+    socket.emit('led_control', { state: newState });
+    
+    // Aussi envoyer via HTTP comme backup
+    fetch('/led_control', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ state: newState })
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('✅ Réponse HTTP LED:', data);
+        if (data.status === 'success') {
+            updateLedDisplay(data.led_state);
+        }
+    })
+    .catch(error => {
+        console.error('❌ Erreur HTTP LED:', error);
+    });
+}
+
+function getCurrentLedState() {
+    const indicator = document.getElementById('led-indicator');
+    return indicator ? indicator.classList.contains('led-on') : false;
+}
+
+function updateLedDisplay(state) {
+    console.log('💡 Mise à jour affichage LED:', state);
+    
+    const indicator = document.getElementById('led-indicator');
+    const statusText = document.getElementById('led-status-text');
+    
+    if (indicator && statusText) {
+        if (state) {
+            indicator.className = 'led-indicator led-on';
+            statusText.textContent = 'ON';
+            statusText.className = 'badge bg-success';
+        } else {
+            indicator.className = 'led-indicator led-off';
+            statusText.textContent = 'OFF';
+            statusText.className = 'badge bg-secondary';
+        }
+    }
+}
+
+// Configuration des alertes
+function saveAlertSettings() {
+    const config = {
+        temperature_min: parseFloat(document.getElementById('temp-min-alert').value),
+        temperature_max: parseFloat(document.getElementById('temp-max-alert').value),
+        humidity_min: parseFloat(document.getElementById('humidity-min-alert').value),
+        humidity_max: parseFloat(document.getElementById('humidity-max-alert').value),
+        alerts_enabled: document.getElementById('alerts-enabled').checked
+    };
+    
+    fetch('/alerts/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+    })
+    .then(response => response.json())
+    .then(data => {
+        showAlert('success', 'Configuration Sauvée', data.message || 'Paramètres mis à jour');
+    })
+    .catch(error => {
+        showAlert('danger', 'Erreur', 'Impossible de sauvegarder la configuration');
+    });
+}
+
+function loadAlertSettings() {
+    fetch('/alerts/config')
+        .then(response => response.json())
+        .then(config => {
+            updateAlertConfigDisplay(config);
+        })
+        .catch(error => {
+            console.error('Erreur chargement config alertes:', error);
+        });
+}
+
+function updateAlertConfigDisplay(config) {
+    const elements = [
+        { id: 'temp-min-alert', value: config.temperature_min },
+        { id: 'temp-max-alert', value: config.temperature_max },
+        { id: 'humidity-min-alert', value: config.humidity_min },
+        { id: 'humidity-max-alert', value: config.humidity_max },
+        { id: 'alerts-enabled', checked: config.alerts_enabled }
+    ];
+    
+    elements.forEach(({ id, value, checked }) => {
+        const element = document.getElementById(id);
+        if (element) {
+            if (checked !== undefined) {
+                element.checked = checked;
+            } else {
+                element.value = value;
+            }
+        }
+    });
+}
+
+// Fonctions utilitaires
+function showAlert(type, title, message) {
+    const alertContainer = document.getElementById('alert-container');
+    if (!alertContainer) return;
+    
+    const alertId = 'alert-' + Date.now();
+    
+    const alertHtml = `
+        <div id="${alertId}" class="alert alert-${type} alert-dismissible" role="alert">
+            <strong>${title}</strong> ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    `;
+    
+    alertContainer.insertAdjacentHTML('beforeend', alertHtml);
+    
+    // Auto-supprimer après 5 secondes
+    setTimeout(() => {
+        const alertElement = document.getElementById(alertId);
+        if (alertElement) {
+            alertElement.remove();
+        }
+    }, 5000);
+}
+
+function exportData() {
+    if (sensorData.length === 0) {
+        showAlert('warning', 'Aucune donnée', 'Aucune donnée à exporter');
+        return;
+    }
+    
+    window.open('/export/csv', '_blank');
+    showAlert('success', 'Export', 'Téléchargement du fichier CSV en cours');
+}
+
+function clearData() {
+    if (confirm('Êtes-vous sûr de vouloir effacer toutes les données ?')) {
+        sensorData = [];
+        hasReceivedData = false;
+        
+        // Réinitialiser les affichages
+        document.getElementById('temperature-value').textContent = '--.- °C';
+        document.getElementById('humidity-value').textContent = '--.- %';
+        document.getElementById('total-readings').textContent = '0';
+        document.getElementById('last-update').textContent = '--';
+        
+        // Réinitialiser les graphiques
+        [temperatureChart, humidityChart, combinedChart].forEach(chart => {
+            if (chart) {
+                chart.data.labels = [];
+                chart.data.datasets.forEach(dataset => dataset.data = []);
+                chart.update();
+            }
+        });
+        
+        // Remettre les messages d'attente
+        document.getElementById('no-data-warning').style.display = 'block';
+        document.querySelectorAll('.chart-container').forEach(container => {
+            container.style.display = 'none';
+        });
+        
+        showAlert('success', 'Données Effacées', 'Toutes les données ont été supprimées');
+    }
+}
+
+function toggleTheme() {
+    const body = document.body;
+    const themeIcon = document.getElementById('theme-icon');
+    
+    body.classList.toggle('dark-mode');
+    
+    if (body.classList.contains('dark-mode')) {
+        themeIcon.className = 'fas fa-sun';
+        localStorage.setItem('theme', 'dark');
+    } else {
+        themeIcon.className = 'fas fa-moon';
+        localStorage.setItem('theme', 'light');
+    }
+}
+
+// Debug en mode développement
+if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    console.log('🐛 Mode debug activé');
+    
+    // Log périodique de l'état SocketIO
+    setInterval(() => {
+        if (socket) {
+            console.log('🔍 État Socket:', {
+                connected: socket.connected,
+                id: socket.id,
+                transport: socket.io.engine?.transport?.name,
+                dataPoints: sensorData.length
+            });
+        }
+    }, 10000); // Toutes les 10 secondes
+}
+</script>

@@ -1,0 +1,25 @@
+# wokwi.toml - Configuration de la simulation Wokwi pour VS Code
+[wokwi]
+version = 1
+# Emulateur à utiliser (esp32dev est un bon choix par défaut)
+firmware = "esp32dev"
+
+# Définition des composants
+[[chip]]
+name = "esp32"
+type = "esp32-devkit-v1"
+
+[[chip]]
+name = "dht"
+type = "dht22"
+# Connecter le capteur DHT22 à l'ESP32
+[chip.pins]
+# Broche VCC du DHT -> 3.3V de l'ESP32 (simulé automatiquement par Wokwi)
+# Broche GND du DHT -> GND de l'ESP32 (simulé automatiquement par Wokwi)
+# Broche DATA du DHT -> GPIO15 de l'ESP32
+data = "esp32:15" # Connecte la broche 'data' du DHT22 au GPIO15 de l'ESP32
+
+# Note: VCC et GND sont généralement connectés automatiquement dans Wokwi,
+# mais vous pouvez les spécifier explicitement si nécessaire :
+# vcc = "esp32:3V3" 
+# gnd = "esp32:GND"
