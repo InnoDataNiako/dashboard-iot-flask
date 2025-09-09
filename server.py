@@ -451,7 +451,8 @@ def handle_request_history(data):
     socketio.emit('history_data', history_data, room=request.sid)
 
 if __name__ == '__main__':
-    print("🚀 Serveur IoT Avancé démarré sur http://localhost:5000")
+    print("🚀 Serveur IoT Avancé démarré")
+    print(f"🔗 URL locale: http://localhost:5000 (Runway ou service cloud fournira un URL public)")
     print("🔗 Endpoints disponibles:")
     print("   GET  / (dashboard)")
     print("   POST /upload (données capteur)")
@@ -462,10 +463,18 @@ if __name__ == '__main__':
     print("   GET  /export/csv (export CSV)")
     print("   GET/POST /alerts/config (config alertes)")
     print("   GET  /status (statut complet)")
-    
+
     # Sauvegarder les données à l'arrêt
     import atexit
     atexit.register(save_data_to_file)
+
+    import eventlet
+    import eventlet.wsgi
+
     port = int(os.environ.get('PORT', 5000))
-    socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
+    print(f"🔌 Démarrage sur le port {port} avec Eventlet...")
+
+    # Démarrage du serveur en production
+    eventlet.wsgi.server(eventlet.listen(('0.0.0.0', port)), app)
+
 
