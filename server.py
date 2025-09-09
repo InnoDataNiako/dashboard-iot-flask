@@ -477,4 +477,3 @@ if __name__ == '__main__':
     # Démarrage du serveur en production
     eventlet.wsgi.server(eventlet.listen(('0.0.0.0', port)), app)
 
-
