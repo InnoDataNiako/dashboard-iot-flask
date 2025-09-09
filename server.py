@@ -466,4 +466,5 @@ if __name__ == '__main__':
     # Sauvegarder les données à l'arrêt
     import atexit
     atexit.register(save_data_to_file)
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
+    port = int(os.environ.get('PORT', 5000))
+    socketio.run(app, host='0.0.0.0', port=port, debug=False)
